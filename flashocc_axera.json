@@ -5,7 +5,7 @@
       "input_configs": [
         {
           "tensor_name": "DEFAULT",
-          "calibration_dataset": "./cache/calib_dataset.zip",
+          "calibration_dataset": "./cache/calib_dataset.tar",
           "calibration_size": -1,
           "calibration_format": "NumpyObject"
         }

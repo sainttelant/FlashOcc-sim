@@ -12,10 +12,10 @@ class Dataloader:
         self.data_root = data_root
         self.config = config
 
-        self.nusc = NuScenes(version="v1.0-mini", dataroot=self.data_root)
+        self.nusc = NuScenes(version="v1.0-trainval", dataroot=self.data_root)
         self.sensor_types = ("CAM_FRONT", "CAM_FRONT_LEFT", "CAM_FRONT_RIGHT", "CAM_BACK", "CAM_BACK_LEFT", "CAM_BACK_RIGHT")
 
-        json_root = os.path.join(self.data_root, 'v1.0-mini')
+        json_root = os.path.join(self.data_root, 'v1.0-trainval')
         calibrated_sensor_path = os.path.join(json_root, 'calibrated_sensor.json')
         ego_pose_path = os.path.join(json_root, 'ego_pose.json')
         sample_data_path = os.path.join(json_root, 'sample_data.json')
@@ -78,24 +78,28 @@ class Dataloader:
     def load(self, filename):
         basename = os.path.basename(filename)
         sample_token = self.get_sample_token(filename)
-        sample = self.nusc.get("sample", sample_token)
-        datas = self.get_sample_datas(sample_token)
-        info = {}
+        try:
+            sample = self.nusc.get("sample", sample_token)
+            datas = self.get_sample_datas(sample_token)
+            info = {}
 
-        for sensor_type in self.sensor_types:
-            data = self.nusc.get("sample_data", sample["data"][sensor_type])
+            for sensor_type in self.sensor_types:
+                data = self.nusc.get("sample_data", sample["data"][sensor_type])
 
-            calibrated_sensor_token = data['calibrated_sensor_token']
-            ego_pose_token = data['ego_pose_token']
+                calibrated_sensor_token = data['calibrated_sensor_token']
+                ego_pose_token = data['ego_pose_token']
 
-            data['sensor_type'] = sensor_type
-            data.update(self.get_sensor_data(calibrated_sensor_token))
-            data.update(self.get_ego_data(ego_pose_token))
-            data['filename'] = os.path.join(self.data_root, data['filename'])
+                data['sensor_type'] = sensor_type
+                data.update(self.get_sensor_data(calibrated_sensor_token))
+                data.update(self.get_ego_data(ego_pose_token))
+                data['filename'] = os.path.join(self.data_root, data['filename'])
 
-            info[sensor_type] = data
-
-        return self.prepare_image_inputs(info), info
+                info[sensor_type] = data
+            return self.prepare_image_inputs(info), info
+        except:
+            print(f"Error loading data token failed, filename: {basename}")
+            return None, None
+        
     
     def get_sensor_transforms(self, cam_data):
         w, x, y, z = cam_data['sensor2ego_rotation']      # 四元数格式

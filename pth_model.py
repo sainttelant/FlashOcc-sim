@@ -17,7 +17,7 @@ Simplified FlashOcc PyTorch model
 class PthModel(nn.Module):
     def __init__(self) -> None:
         super(PthModel, self).__init__()
-
+    
         self.numC_Trans = 64
         self.img_backbone = ResNet50()
         self.img_neck = CustomFPN([1024, 2048], 256)

@@ -42,6 +42,8 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     for i, img in enumerate(img_paths):
         inputs, _ = dataloader.load(img)
+        if inputs is None:
+            continue
         bev_inputs = model.get_bev_pool_input(inputs)
 
         onnx_inputs = {
