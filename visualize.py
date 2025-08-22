@@ -1,12 +1,13 @@
 import numpy as np
 import cv2
 import torch
-import open3d as o3d
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import os
 
 __all__ = ['visualize']
 
-
+# Constants
 NOT_OBSERVED = -1
 FREE = 0
 OCCUPIED = 1
@@ -20,29 +21,50 @@ SPTIAL_SHAPE = [200, 200, 16]
 TGT_VOXEL_SIZE = [0.4, 0.4, 0.4]
 TGT_POINT_CLOUD_RANGE = [-40, -40, -1, 40, 40, 5.4]
 
-
+# Color map for occupancy classes
 colormap_to_colors = np.array(
     [
         [0,   0,   0, 255],  # 0 undefined
-        [112, 128, 144, 255],  # 1 barrier  orange
-        [220, 20, 60, 255],    # 2 bicycle  Blue
-        [255, 127, 80, 255],   # 3 bus  Darkslategrey
-        [255, 158, 0, 255],  # 4 car  Crimson
-        [233, 150, 70, 255],   # 5 cons. Veh  Orangered
-        [255, 61, 99, 255],  # 6 motorcycle  Darkorange
-        [0, 0, 230, 255], # 7 pedestrian  Darksalmon
-        [47, 79, 79, 255],  # 8 traffic cone  Red
-        [255, 140, 0, 255],# 9 trailer  Slategrey
-        [255, 99, 71, 255],# 10 truck Burlywood
-        [0, 207, 191, 255],    # 11 drive sur  Green
-        [175, 0, 75, 255],  # 12 other lat  nuTonomy green
+        [112, 128, 144, 255],  # 1 barrier
+        [220, 20, 60, 255],    # 2 bicycle
+        [255, 127, 80, 255],   # 3 bus
+        [255, 158, 0, 255],  # 4 car
+        [233, 150, 70, 255],   # 5 cons. Veh
+        [255, 61, 99, 255],  # 6 motorcycle
+        [0, 0, 230, 255], # 7 pedestrian
+        [47, 79, 79, 255],  # 8 traffic cone
+        [255, 140, 0, 255],# 9 trailer
+        [255, 99, 71, 255],# 10 truck
+        [0, 207, 191, 255],    # 11 drive sur
+        [175, 0, 75, 255],  # 12 other lat
         [75, 0, 75, 255],  # 13 sidewalk
         [112, 180, 60, 255],    # 14 terrain
         [222, 184, 135, 255],    # 15 manmade
-        [0, 175, 0, 255],   # 16 vegeyation
+        [0, 175, 0, 255],   # 16 vegetation
 ], dtype=np.float32)
 
+# Define color_map for occ2img function (using the same colors as colormap_to_colors)
+color_map = colormap_to_colors.astype(np.uint8)
 
+# Define occ_class_names for occ2img function
+occ_class_names = [
+    'undefined', 'barrier', 'bicycle', 'bus', 'car', 'construction_vehicle',
+    'motorcycle', 'pedestrian', 'traffic_cone', 'trailer', 'truck',
+    'driveable_surface', 'other_flat', 'sidewalk',
+    'terrain', 'manmade', 'vegetation', 'free'
+]
+
+# Define inst_class_ids for occ2img function
+inst_class_ids = [2, 3, 4, 5, 6, 7, 9, 10]
+
+# Generate pano_color_map for occ2img function
+def generate_rgb_color(number):
+    red = (number % 256)
+    green = ((number // 256) % 256)
+    blue = ((number // 65536) % 256)
+    return [red, green, blue]
+
+pano_color_map = np.array([generate_rgb_color(number) for number in np.random.randint(0, 65536*256, 256)])
 
 def voxel2points(voxel, occ_show, voxelSize):
     """
@@ -74,7 +96,6 @@ def voxel_profile(voxel, voxel_size):
         box: (N, 7) (x, y, z - dz/2, vx, vy, vz, 0)
     """
     centers = torch.cat((voxel[:, :2], voxel[:, 2][:, None] - voxel_size[2] / 2), dim=1)     # (x, y, z - dz/2)
-    # centers = voxel
     wlh = torch.cat((torch.tensor(voxel_size[0]).repeat(centers.shape[0])[:, None],
                      torch.tensor(voxel_size[1]).repeat(centers.shape[0])[:, None],
                      torch.tensor(voxel_size[2]).repeat(centers.shape[0])[:, None]), dim=1)
@@ -126,38 +147,36 @@ def show_point_cloud(points: np.ndarray, colors=True, points_colors=None, bbox3d
     :return:
     """
     if vis is None:
-        vis = o3d.visualization.VisualizerWithKeyCallback()
-        vis.create_window()
+        # Use matplotlib instead of open3d
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(111, projection='3d')
+        vis = {'fig': fig, 'ax': ax}
+    
     if isinstance(offset, list) or isinstance(offset, tuple):
         offset = np.array(offset)
-
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points+offset)
-    if colors:
-        pcd.colors = o3d.utility.Vector3dVector(points_colors[:, :3])
-    mesh_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-        size=1, origin=[0, 0, 0])
-
-    voxelGrid = o3d.geometry.VoxelGrid.create_from_point_cloud(pcd, voxel_size=voxel_size)
-    if large_voxel:
-        vis.add_geometry(voxelGrid)
+    
+    # Plot points
+    ax = vis['ax']
+    if colors and points_colors is not None:
+        ax.scatter(points[:, 0] + offset[0], points[:, 1] + offset[1], points[:, 2] + offset[2], 
+                  c=points_colors[:, :3] / 255.0, marker='o', s=10, alpha=0.6)
     else:
-        vis.add_geometry(pcd)
-
-    if voxelize:
-        line_sets = o3d.geometry.LineSet()
-        line_sets.points = o3d.open3d.utility.Vector3dVector(bbox_corners.reshape((-1, 3))+offset)
-        line_sets.lines = o3d.open3d.utility.Vector2iVector(linesets.reshape((-1, 2)))
-        line_sets.paint_uniform_color((0, 0, 0))
-        vis.add_geometry(line_sets)
-
-    vis.add_geometry(mesh_frame)
-
-    # ego_pcd = o3d.geometry.PointCloud()
-    # ego_points = generate_the_ego_car()
-    # ego_pcd.points = o3d.utility.Vector3dVector(ego_points)
-    # vis.add_geometry(ego_pcd)
-
+        ax.scatter(points[:, 0] + offset[0], points[:, 1] + offset[1], points[:, 2] + offset[2], 
+                  c='b', marker='o', s=10, alpha=0.6)
+    
+    # Plot coordinate frame
+    axis_length = 1.0
+    ax.quiver(offset[0], offset[1], offset[2], axis_length, 0, 0, color='r', arrow_length_ratio=0.1)
+    ax.quiver(offset[0], offset[1], offset[2], 0, axis_length, 0, color='g', arrow_length_ratio=0.1)
+    ax.quiver(offset[0], offset[1], offset[2], 0, 0, axis_length, color='b', arrow_length_ratio=0.1)
+    
+    # Plot voxel edges if needed
+    if voxelize and bbox_corners is not None and linesets is not None:
+        for i in range(linesets.shape[0]):
+            p1 = bbox_corners[linesets[i, 0]] + offset
+            p2 = bbox_corners[linesets[i, 1]] + offset
+            ax.plot([p1[0], p2[0]], [p1[1], p2[1]], [p1[2], p2[2]], 'k-', linewidth=1)
+    
     return vis
 
 
@@ -226,7 +245,45 @@ def generate_the_ego_car():
     return ego_point_xyz
 
 
-def visualize(pred_occ, info, vis_dir="vis_result", scale_factor=4, canvas_size=1000, visible=False):
+def occ2img(semantics=None, is_pano=False, panoptics=None):
+    """将占据栅格转换为可视化图像"""
+    H, W, D = semantics.shape
+    free_id = len(occ_class_names) - 1
+    
+    # 初始化2D语义图
+    semantics_2d = np.ones([H, W], dtype=np.int32) * free_id
+    for i in range(D):
+        semantics_i = semantics[..., i]
+        non_free_mask = (semantics_i != free_id)
+        semantics_2d[non_free_mask] = semantics_i[non_free_mask]
+
+    # 应用颜色映射
+    viz = color_map[semantics_2d]
+    viz = viz[..., :3]
+
+    # 创建实例掩码
+    inst_mask = np.zeros_like(semantics_2d).astype(np.bool)
+    for ind in inst_class_ids:
+        inst_mask[semantics_2d == ind] = True
+    
+    # 如果是全景分割，应用实例颜色
+    if is_pano:
+        panoptics_2d = np.ones([H, W], dtype=np.int32) * 0
+        for i in range(D):
+            panoptics_i = panoptics[..., i]
+            semantics_i = semantics[..., i]
+            non_free_mask = (semantics_i != free_id)
+            panoptics_2d[non_free_mask] = panoptics_i[non_free_mask]
+        
+        viz_pano = pano_color_map[panoptics_2d]
+        viz[inst_mask, :] = viz_pano[inst_mask, :]
+
+    # 调整大小
+    viz = cv2.resize(viz, dsize=(800, 800))
+    return viz
+
+
+def visualize(pred_occ, info, vis_dir="results", scale_factor=4, canvas_size=1000, visible=False):
     # prepare save path and medium
     os.makedirs(vis_dir, exist_ok=True)
 
@@ -236,55 +293,53 @@ def visualize(pred_occ, info, vis_dir="vis_result", scale_factor=4, canvas_size=
     ]
     print('start visualizing results')
 
-    vis = o3d.visualization.VisualizerWithKeyCallback()
-    vis.create_window(visible=visible)
-
     # load imgs
     imgs = []
     for view in views:
         img = cv2.imread(info[view]['filename'])
         imgs.append(img)
 
-    # occ_canvas
+    # Create 3D plot
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Process occupancy data
     voxel_show = pred_occ != FREE_LABEL
     voxel_size = VOXEL_SIZE
-    vis = show_occ(torch.from_numpy(pred_occ), torch.from_numpy(voxel_show), voxel_size=voxel_size, vis=vis,
-                    offset=[0, pred_occ.shape[0] * voxel_size[0] * 1.2 * 0, 0])
+    
+    # Get coordinates of occupied voxels
+    occupied_indices = np.where(voxel_show)
+    x = occupied_indices[0] * voxel_size[0] + POINT_CLOUD_RANGE[0]
+    y = occupied_indices[1] * voxel_size[1] + POINT_CLOUD_RANGE[1]
+    z = occupied_indices[2] * voxel_size[2] + POINT_CLOUD_RANGE[2]
+    
+    # Get colors for each occupied voxel
+    colors = color_map[pred_occ[occupied_indices]]
+    # Normalize colors to [0, 1] for matplotlib
+    colors = colors[:, :3] / 255.0
 
-    view_control = vis.get_view_control()
+    # Plot voxels with colors
+    ax.scatter(x, y, z, c=colors, marker='s', alpha=0.6)
 
-    look_at = np.array([-0.185, 0.513, 3.485])
-    front = np.array([-0.974, -0.055, 0.221])
-    up = np.array([0.221, 0.014, 0.975])
-    zoom = np.array([0.08])
+    # Set view angle similar to original
+    ax.view_init(elev=20, azim=45)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
 
-    view_control.set_lookat(look_at)
-    view_control.set_front(front)
-    view_control.set_up(up)
-    view_control.set_zoom(zoom)
+    # Save the plot
+    plt.savefig(os.path.join(vis_dir, 'occ_3d.png'), bbox_inches='tight', dpi=100)
+    plt.close()
 
-    opt = vis.get_render_option()
-    opt.background_color = np.asarray([1, 1, 1])
-    opt.line_width = 5
-
-    if visible:
-        vis.poll_events()
-        vis.update_renderer()
-        vis.run()
-
-    # if args.format == 'image':
-    #     out_dir = os.path.join(vis_dir, f'{scene_name}', f'{sample_token}')
-    #     mmcv.mkdir_or_exist(out_dir)
-    #     vis.capture_screen_image(os.path.join(vis_dir, 'screen_occ.png'), do_render=True)
-
-    occ_canvas = vis.capture_screen_float_buffer(do_render=True)
-    occ_canvas = np.asarray(occ_canvas)
-    occ_canvas = (occ_canvas * 255).astype(np.uint8)
-    occ_canvas = occ_canvas[..., [2, 1, 0]]
+    # Create 2D visualization using occ2img function
+    occ_2d = occ2img(semantics=pred_occ)
+    cv2.imwrite(os.path.join(vis_dir, 'occ_2d.png'), occ_2d[..., ::-1])  # Convert RGB to BGR for OpenCV
+    
+    # Read the saved 3D image for further processing
+    occ_canvas = cv2.imread(os.path.join(vis_dir, 'occ_3d.png'))
     occ_canvas_resize = cv2.resize(occ_canvas, (canvas_size, canvas_size), interpolation=cv2.INTER_CUBIC)
 
-    vis.clear_geometries()
-
+    # Create composite image
     big_img = np.zeros((900 * 2 + canvas_size * scale_factor, 1600 * 3, 3),
                     dtype=np.uint8)
     big_img[:900, :, :] = np.concatenate(imgs[:3], axis=1)
@@ -298,8 +353,9 @@ def visualize(pred_occ, info, vis_dir="vis_result", scale_factor=4, canvas_size=
     big_img[int(900 / scale_factor):int(900 / scale_factor) + canvas_size,
             w_begin:w_begin + canvas_size, :] = occ_canvas_resize
 
+    # Save images
     for i, img in enumerate(imgs):
         cv2.imwrite(os.path.join(vis_dir, f'img{i}.png'), img)
-    cv2.imwrite(os.path.join(vis_dir, 'occ.png'), occ_canvas)
+    cv2.imwrite(os.path.join(vis_dir, 'occ_3d.png'), occ_canvas)
     cv2.imwrite(os.path.join(vis_dir, 'overall.png'), big_img)
     print(f"Saved visualize result to {vis_dir}")
