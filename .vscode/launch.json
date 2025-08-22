@@ -5,7 +5,9 @@
             "name": "Python 调试程序: gen_calib_dataset.py",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/gen_calib_dataset.py",
+            //"program": "${workspaceFolder}/gen_calib_dataset.py",
+            "program": "${workspaceFolder}/main.py",
+            "args": ["--img","data/nuscenes/samples/CAM_FRONT/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151078762404.jpg"],
             "console": "integratedTerminal"
         }
     ]

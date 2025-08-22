@@ -108,9 +108,11 @@ def main():
     # onnx_outputs = np.fromfile("outputs/cls_occ_label.bin", dtype=np.int32).reshape(
     #     (200, 200, 16)
     # )
-
+    if not os.path.exists("results"):
+        os.makedirs("results")
+    
     result = vis_occ(onnx_outputs)
-    cv2.imwrite("sementics.jpg", result)
+    cv2.imwrite("results/sementics.jpg", result)
     print("Saved sementics to sementics.jpg")
 
     visualize(onnx_outputs, info, visible=False)

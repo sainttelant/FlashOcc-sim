@@ -226,7 +226,7 @@ def generate_the_ego_car():
     return ego_point_xyz
 
 
-def visualize(pred_occ, info, vis_dir="vis_result", scale_factor=4, canvas_size=1000, visible=False):
+def visualize(pred_occ, info, vis_dir="results", scale_factor=4, canvas_size=1000, visible=False):
     # prepare save path and medium
     os.makedirs(vis_dir, exist_ok=True)
 
